@@ -58,7 +58,7 @@ resource "google_compute_firewall" "lb" {
 
   source_ranges = distinct(concat(
     var.allowed_cidr_blocks,
-    ["35.191.0.0/16", "130.211.0.0/22"],
+    local.health_check_cidrs,
   ))
 }
 

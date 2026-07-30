@@ -16,6 +16,13 @@ locals {
 
   # Named port registered on the parent MIG via output "named_ports".
   port_name = "tcp-${var.port}"
+
+  # GCP load balancer / health check probe ranges (required for NLB health checks).
+  # https://cloud.google.com/load-balancing/docs/health-check-concepts#ip-ranges
+  health_check_cidrs = [
+    "35.191.0.0/16",
+    "130.211.0.0/22",
+  ]
 }
 
 variable "scheme" {
