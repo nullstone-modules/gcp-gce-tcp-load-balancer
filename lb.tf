@@ -26,7 +26,7 @@ resource "google_compute_region_backend_service" "this" {
   protocol              = "TCP"
   load_balancing_scheme = "EXTERNAL"
   health_checks         = [google_compute_region_health_check.this.id]
-  port_name             = local.service_port_name
+  port_name             = local.port_name
 
   backend {
     group          = local.instance_group

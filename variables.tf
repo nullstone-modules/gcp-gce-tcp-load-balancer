@@ -9,11 +9,13 @@ EOF
 }
 
 locals {
-  instance_group    = var.app_metadata["instance_group"]
-  network           = var.app_metadata["network"]
-  region            = var.app_metadata["region"]
-  service_port_name = var.app_metadata["service_port_name"]
-  instance_tags     = split(",", var.app_metadata["instance_tags"])
+  instance_group = var.app_metadata["instance_group"]
+  network        = var.app_metadata["network"]
+  region         = var.app_metadata["region"]
+  instance_tags  = split(",", var.app_metadata["instance_tags"])
+
+  # Named port registered on the parent MIG via output "named_ports".
+  port_name = "tcp-${var.port}"
 }
 
 variable "scheme" {
@@ -27,7 +29,7 @@ variable "port" {
   description = <<EOF
 External TCP port on the load balancer.
 Passthrough NLB does not translate ports; the MIG host must listen on this same port
-(docker host_port and gcp-gce-server service_port must match).
+(docker host_port must match).
 EOF
 }
 

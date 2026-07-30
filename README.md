@@ -6,10 +6,13 @@ Layer 4 (TCP) **passthrough** Network Load Balancer.
 Use this for non-HTTP TCP workloads (for example SFTP). The load balancer does
 not terminate TLS or rewrite ports; the VM host port must match `port`.
 
+This capability owns the MIG named port: it exports `named_ports`, and
+`gcp-gce-server` registers those on the instance group.
+
 ## Requirements
 
-- Parent app: `gcp-gce-server` (MIG + named port `app` via `app_metadata`)
-- `service_port` = docker `host_port` = this capability `port`
+- Parent app: `gcp-gce-server` (regional MIG + `app_metadata.instance_group`)
+- docker `host_port` (or workload listen port) = this capability `port`
 
 ## Inputs
 
