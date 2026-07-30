@@ -9,11 +9,20 @@ EOF
 }
 
 locals {
-  instance_group    = var.app_metadata["instance_group"]
-  network           = var.app_metadata["network"]
-  region            = var.app_metadata["region"]
-  service_port_name = var.app_metadata["service_port_name"]
-  instance_tags     = split(",", var.app_metadata["instance_tags"])
+  instance_group = var.app_metadata["instance_group"]
+  network        = var.app_metadata["network"]
+  region         = var.app_metadata["region"]
+  instance_tags  = split(",", var.app_metadata["instance_tags"])
+
+  # Named port registered on the parent MIG via output "named_ports".
+  port_name = "tcp-${var.service_port}"
+
+  # GCP load balancer / health check probe ranges (required for NLB health checks).
+  # https://cloud.google.com/load-balancing/docs/health-check-concepts#ip-ranges
+  health_check_cidrs = [
+    "35.191.0.0/16",
+    "130.211.0.0/22",
+  ]
 }
 
 variable "scheme" {
@@ -22,12 +31,13 @@ variable "scheme" {
   description = "URL scheme used when composing public_urls (e.g. tcp, sftp)."
 }
 
-variable "port" {
+variable "service_port" {
   type        = number
   description = <<EOF
-External TCP port on the load balancer.
+External TCP service port on the load balancer.
 Passthrough NLB does not translate ports; the MIG host must listen on this same port
-(docker host_port and gcp-gce-server service_port must match).
+(docker host_port must match). Named service_port (not port) so a future L4 proxy
+capability can add server_port for backend remapping.
 EOF
 }
 
