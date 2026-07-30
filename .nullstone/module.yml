@@ -1,0 +1,17 @@
+org_name: nullstone
+name: gcp-gce-tcp-load-balancer
+friendly_name: TCP Load Balancer
+description: Creates an external L4 TCP passthrough load balancer for a GCE server MIG
+category: capability
+subcategory: ingress
+provider_types:
+    - gcp
+platform: gce
+subplatform: ""
+type: ""
+appCategories:
+    - server
+is_public: true
+tool_name: opentofu
+include: []
+source_url: https://github.com/nullstone-modules/gcp-gce-tcp-load-balancer
