@@ -16,7 +16,7 @@ resource "google_compute_region_health_check" "this" {
   unhealthy_threshold = var.health_check_unhealthy_threshold
 
   tcp_health_check {
-    port = var.port
+    port = var.service_port
   }
 }
 
@@ -39,7 +39,7 @@ resource "google_compute_forwarding_rule" "this" {
   region                = local.region
   ip_protocol           = "TCP"
   load_balancing_scheme = "EXTERNAL"
-  ports                 = [tostring(var.port)]
+  ports                 = [tostring(var.service_port)]
   ip_address            = google_compute_address.this.address
   backend_service       = google_compute_region_backend_service.this.id
   labels                = local.labels
@@ -53,7 +53,7 @@ resource "google_compute_firewall" "lb" {
 
   allow {
     protocol = "tcp"
-    ports    = [tostring(var.port)]
+    ports    = [tostring(var.service_port)]
   }
 
   source_ranges = distinct(concat(

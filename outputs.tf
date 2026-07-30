@@ -1,6 +1,6 @@
 locals {
   host = local.has_subdomain ? trimsuffix(local.subdomain_fqdn, ".") : google_compute_address.this.address
-  url  = "${var.scheme}://${local.host}:${var.port}"
+  url  = "${var.scheme}://${local.host}:${var.service_port}"
 }
 
 # Consumed by gcp-gce-server as local.capabilities.named_ports and applied on the MIG.
@@ -9,7 +9,7 @@ output "named_ports" {
   value = [
     {
       name = local.port_name
-      port = var.port
+      port = var.service_port
     }
   ]
 }
