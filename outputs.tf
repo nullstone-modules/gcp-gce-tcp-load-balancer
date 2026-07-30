@@ -3,13 +3,12 @@ locals {
   url  = "${var.scheme}://${local.host}:${var.service_port}"
 }
 
-# Consumed by gcp-gce-server as local.capabilities.named_ports and applied on the MIG.
-# Output depends only on vars so Terraform can create the MIG named ports before LB backends.
-output "named_ports" {
+# App MIG joins these target pools.
+output "load_balancers" {
   value = [
     {
-      name = local.port_name
-      port = var.service_port
+      port        = tostring(var.service_port)
+      target_pool = google_compute_target_pool.this.self_link
     }
   ]
 }

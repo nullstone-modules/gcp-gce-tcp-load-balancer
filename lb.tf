@@ -1,4 +1,5 @@
-# External passthrough Network Load Balancer (L4). TCP only; no TLS termination.
+# External TCP passthrough. Capability owns the target pool; the app MIG joins
+# it via the load_balancers output.
 
 resource "google_compute_address" "this" {
   name         = local.resource_name
@@ -7,31 +8,9 @@ resource "google_compute_address" "this" {
   labels       = local.labels
 }
 
-resource "google_compute_region_health_check" "this" {
+resource "google_compute_target_pool" "this" {
   name   = local.resource_name
   region = local.region
-
-  timeout_sec         = var.health_check_timeout
-  check_interval_sec  = var.health_check_interval
-  unhealthy_threshold = var.health_check_unhealthy_threshold
-
-  tcp_health_check {
-    port = var.service_port
-  }
-}
-
-resource "google_compute_region_backend_service" "this" {
-  name                  = local.resource_name
-  region                = local.region
-  protocol              = "TCP"
-  load_balancing_scheme = "EXTERNAL"
-  health_checks         = [google_compute_region_health_check.this.id]
-  port_name             = local.port_name
-
-  backend {
-    group          = local.instance_group
-    balancing_mode = "CONNECTION"
-  }
 }
 
 resource "google_compute_forwarding_rule" "this" {
@@ -39,13 +18,12 @@ resource "google_compute_forwarding_rule" "this" {
   region                = local.region
   ip_protocol           = "TCP"
   load_balancing_scheme = "EXTERNAL"
-  ports                 = [tostring(var.service_port)]
+  port_range            = tostring(var.service_port)
   ip_address            = google_compute_address.this.address
-  backend_service       = google_compute_region_backend_service.this.id
+  target                = google_compute_target_pool.this.self_link
   labels                = local.labels
 }
 
-# Passthrough preserves client IPs; health checks use Google probe ranges.
 resource "google_compute_firewall" "lb" {
   name        = "${local.resource_name}-allow-lb"
   network     = local.network
@@ -56,10 +34,7 @@ resource "google_compute_firewall" "lb" {
     ports    = [tostring(var.service_port)]
   }
 
-  source_ranges = distinct(concat(
-    var.allowed_cidr_blocks,
-    local.health_check_cidrs,
-  ))
+  source_ranges = var.allowed_cidr_blocks
 }
 
 resource "google_dns_record_set" "this" {
