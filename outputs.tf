@@ -20,3 +20,9 @@ output "public_urls" {
     }
   ]
 }
+
+# Empty unless server_port is set; gcp-gce-server merges these into the VM cloud-init.
+output "cloud_init_stanzas" {
+  description = "Cloud-init write_files and runcmd contributed to the parent gcp-gce-server module."
+  value       = local.cloud_init_stanzas
+}
