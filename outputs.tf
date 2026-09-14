@@ -1,5 +1,5 @@
 locals {
-  host = local.has_subdomain ? trimsuffix(local.subdomain_fqdn, ".") : google_compute_address.this.address
+  host = local.has_subdomain ? trimsuffix(local.subdomain_fqdn, ".") : local.ip_address
   url  = "${var.scheme}://${local.host}:${var.service_port}"
 }
 
@@ -7,11 +7,15 @@ locals {
 output "load_balancers" {
   value = [
     {
-      type         = "tcp"
-      name         = local.resource_name
-      ip_address   = google_compute_address.this.address
-      service_port = var.service_port
-      server_port  = local.server_port
+      type           = "tcp"
+      name           = local.resource_name
+      scheme         = var.internal ? "INTERNAL" : "EXTERNAL"
+      proxied        = var.proxied
+      proxy_protocol = var.proxy_protocol
+      ip_address     = local.ip_address
+      service_port   = var.service_port
+      server_port    = local.server_port
+      port_name      = "tcp-${local.server_port}" # MIG named port; used only when proxied
       health_check = {
         interval_sec        = var.health_check.interval_sec
         timeout_sec         = var.health_check.timeout_sec
@@ -23,11 +27,11 @@ output "load_balancers" {
 }
 
 output "public_urls" {
-  value = [
-    {
-      url = local.url
-    }
-  ]
+  value = var.internal ? [] : [{ url = local.url }]
+}
+
+output "private_urls" {
+  value = var.internal ? [{ url = local.url }] : []
 }
 
 # Empty unless server_port is set; gcp-gce-server merges these into the VM cloud-init.
