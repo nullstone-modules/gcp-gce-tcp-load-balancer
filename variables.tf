@@ -67,3 +67,15 @@ locals {
   # server_port == service_port needs no rule; treat it as unset.
   redirect_enabled = var.server_port != null && var.server_port != var.service_port
 }
+
+variable "name_overrides" {
+  type = object({
+    ip_address = optional(string)
+  })
+  default     = { ip_address = "" }
+  description = <<EOF
+Override generated GCP resource names. Empty or unset fields keep the default name.
+- `ip_address`: name of the reserved static IP (google_compute_address).
+Changing a name after creation replaces the resource (a new IP address is allocated).
+EOF
+}

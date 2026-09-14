@@ -18,6 +18,7 @@ External L4 TCP passthrough load balancer for `gcp-gce-server`.
 | `server_port` | `null` | VM port that LB traffic is redirected to; unset = no translation |
 | `scheme` | `tcp` | Scheme for `public_urls` (for example `sftp`) |
 | `allowed_cidr_blocks` | `["0.0.0.0/0"]` | Client CIDRs to the service port |
+| `name_overrides` | `{ ip_address = "" }` | Override generated resource names; `ip_address` renames the static IP |
 
 Optional connection: `subdomain` for a DNS A record.
 

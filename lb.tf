@@ -2,7 +2,7 @@
 # it via the load_balancers output.
 
 resource "google_compute_address" "this" {
-  name         = local.resource_name
+  name         = coalesce(var.name_overrides.ip_address, local.resource_name)
   region       = local.region
   network_tier = "PREMIUM"
   labels       = local.labels
