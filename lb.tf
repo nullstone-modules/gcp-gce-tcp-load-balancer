@@ -1,5 +1,12 @@
-# External TCP passthrough. Capability owns the target pool; the app MIG joins
-# it via the load_balancers output.
+# External TCP passthrough. Two modes (var.mode):
+# - target_pool: capability owns the target pool and forwarding rule; the app MIG joins the pool.
+# - backend_service: capability owns only the address, DNS, and client firewall; gcp-gce-server
+#   creates the health check, backend service, and forwarding rule because those must name the
+#   MIG instance group, and a capability input derived from the MIG is a module cycle.
+
+locals {
+  target_pool_mode = var.mode == "target_pool"
+}
 
 resource "google_compute_address" "this" {
   name         = coalesce(var.name_overrides.ip_address, local.resource_name)
@@ -9,19 +16,34 @@ resource "google_compute_address" "this" {
 }
 
 resource "google_compute_target_pool" "this" {
+  count = local.target_pool_mode ? 1 : 0
+
   name   = local.resource_name
   region = local.region
 }
 
 resource "google_compute_forwarding_rule" "this" {
+  count = local.target_pool_mode ? 1 : 0
+
   name                  = local.resource_name
   region                = local.region
   ip_protocol           = "TCP"
   load_balancing_scheme = "EXTERNAL"
   port_range            = tostring(var.service_port)
   ip_address            = google_compute_address.this.address
-  target                = google_compute_target_pool.this.self_link
+  target                = google_compute_target_pool.this[0].self_link
   labels                = local.labels
+}
+
+# 0.0.x created these without count; keep state addresses stable across the upgrade.
+moved {
+  from = google_compute_target_pool.this
+  to   = google_compute_target_pool.this[0]
+}
+
+moved {
+  from = google_compute_forwarding_rule.this
+  to   = google_compute_forwarding_rule.this[0]
 }
 
 resource "google_compute_firewall" "lb" {

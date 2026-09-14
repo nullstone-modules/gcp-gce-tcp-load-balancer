@@ -1,6 +1,6 @@
 # On-VM port translation for load balancer traffic (see README "Port translation on the VM").
 #
-# A target-pool LB is passthrough: packets reach the VM with the forwarding rule's IP as the
+# A passthrough LB does not NAT: packets reach the VM with the forwarding rule's IP as the
 # destination, while IAP/VPC/tailnet packets carry the VM's private IP. One iptables NAT rule
 # keyed on "not my private IP" rewrites only LB traffic from service_port to server_port.
 # It is keyed on the private IP (read from the metadata server at boot) rather than the LB
@@ -16,8 +16,8 @@ locals {
   redirect_unit_name   = "${local.redirect_name}.service"
   redirect_unit_path   = "/etc/systemd/system/${local.redirect_unit_name}"
 
-  # coalesce keeps templatefile() renderable when server_port is null (stanza is dropped anyway).
-  redirect_server_port = coalesce(var.server_port, var.service_port)
+  # local.server_port keeps templatefile() renderable when var.server_port is null (stanza is dropped anyway).
+  redirect_server_port = local.server_port
 
   redirect_script = templatefile("${path.module}/templates/lb-port-redirect.sh.tpl", {
     service_port = var.service_port

@@ -47,3 +47,5 @@ terraform.rc
 # Module publish artifacts and local lock
 *.tar.gz
 .terraform.lock.hcl
+__backend__.tf
+.nullstone/active-workspace.yml
