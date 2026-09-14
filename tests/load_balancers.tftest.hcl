@@ -1,4 +1,4 @@
-# Asserts the load_balancers spec consumed by gcp-gce-server in both modes.
+# Asserts the load_balancers spec consumed by gcp-gce-server.
 # Run: tofu test
 
 mock_provider "ns" {
@@ -20,10 +20,6 @@ mock_provider "google" {
   mock_resource "google_compute_address" {
     defaults = { address = "203.0.113.10" }
   }
-
-  mock_resource "google_compute_target_pool" {
-    defaults = { self_link = "https://www.googleapis.com/compute/v1/projects/proj/regions/us-central1/targetPools/sftp-server-abcde" }
-  }
 }
 
 mock_provider "random" {
@@ -43,39 +39,14 @@ variables {
   server_port  = 2022
 }
 
-run "target_pool_mode_is_default" {
-  command = plan
-
-  assert {
-    condition     = length(resource.google_compute_target_pool.this) == 1 && length(resource.google_compute_forwarding_rule.this) == 1
-    error_message = "default mode must create the target pool and forwarding rule"
-  }
-
-  assert {
-    condition     = output.load_balancers == [{ type = "target_pool", name = "sftp-server-abcde", target_pool = "https://www.googleapis.com/compute/v1/projects/proj/regions/us-central1/targetPools/sftp-server-abcde" }]
-    error_message = "target_pool entry shape mismatch"
-  }
-
-  assert {
-    condition     = length(output.cloud_init_stanzas) == 1
-    error_message = "port-redirect stanza expected when server_port differs from service_port"
-  }
-}
-
-run "backend_service_mode" {
+run "with_server_port" {
   command = plan
 
   variables {
-    mode                             = "backend_service"
     health_check_interval_sec        = 10
     health_check_timeout_sec         = 5
     health_check_healthy_threshold   = 1
     health_check_unhealthy_threshold = 3
-  }
-
-  assert {
-    condition     = length(resource.google_compute_target_pool.this) == 0 && length(resource.google_compute_forwarding_rule.this) == 0
-    error_message = "backend_service mode must not create a target pool or forwarding rule"
   }
 
   assert {
@@ -97,15 +68,19 @@ run "backend_service_mode" {
 
   assert {
     condition     = output.public_urls == [{ url = "sftp://203.0.113.10:22" }]
-    error_message = "public_urls unchanged by mode"
+    error_message = "public_urls must use scheme, address, and service_port"
+  }
+
+  assert {
+    condition     = length(output.cloud_init_stanzas) == 1
+    error_message = "port-redirect stanza expected when server_port differs from service_port"
   }
 }
 
-run "backend_service_mode_without_server_port" {
+run "without_server_port" {
   command = plan
 
   variables {
-    mode        = "backend_service"
     server_port = null
   }
 
@@ -115,17 +90,23 @@ run "backend_service_mode_without_server_port" {
   }
 
   assert {
+    condition     = output.load_balancers[0].health_check == { interval_sec = 5, timeout_sec = 4, healthy_threshold = 2, unhealthy_threshold = 2 }
+    error_message = "health_check must carry the defaults"
+  }
+
+  assert {
     condition     = length(output.cloud_init_stanzas) == 0
     error_message = "no port-redirect stanza without server_port"
   }
 }
 
-run "rejects_unknown_mode" {
+run "timeout_must_not_exceed_interval" {
   command = plan
 
   variables {
-    mode = "proxy"
+    health_check_interval_sec = 3
+    health_check_timeout_sec  = 4
   }
 
-  expect_failures = [var.mode]
+  expect_failures = [var.health_check_timeout_sec]
 }

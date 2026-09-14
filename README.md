@@ -2,22 +2,20 @@
 
 External L4 TCP passthrough load balancer for `gcp-gce-server`.
 
-## Attach model (`mode`)
+## Attach model
 
 The capability never references the MIG: `gcp-gce-server` consumes each capability as a whole
-object, so a capability input derived from the MIG is a Terraform module cycle. Two modes:
+object, so a capability input derived from the MIG is a Terraform module cycle. Ownership is
+split instead:
 
-| `mode` | Capability creates | Server creates | Health check |
-|--------|--------------------|----------------|--------------|
-| `target_pool` (default) | static IP, target pool, forwarding rule, DNS, firewall | MIG joins the pool via `target_pools` | none |
-| `backend_service` | static IP, DNS, firewall | TCP health check, backend service on the MIG instance group, forwarding rule | TCP on `server_port` |
+| Owner | Resources |
+|-------|-----------|
+| This capability | static IP, DNS A record, client firewall on `service_port`, port-redirect cloud-init, `load_balancers` spec, `public_urls` |
+| `gcp-gce-server` >= 0.1.0 | TCP health check on `server_port`, backend service on the MIG instance group, forwarding rule on the capability's IP, firewall for Google's health-check ranges to `server_port` |
 
-`backend_service` requires `gcp-gce-server` >= 0.1.0. Older servers ignore the `tcp` spec and
-attach nothing. Switch to it to get health checks and backend membership derived from the
-instance group instead of a pool that can silently lose members. Switching mode on a live
-workspace recreates the forwarding rule on the same address: about 30–60 s of refused
-connections on `service_port`. The address, DNS record, firewall, and port-redirect stanza are
-untouched; no state moves.
+Backend membership is derived from the instance group, so it cannot drift, and the health check
+removes an instance that stops answering on `server_port`. Older servers ignore the spec and
+attach nothing.
 
 `service_port` must match the Docker `host_port` unless `server_port` is set (see below).
 
@@ -27,11 +25,10 @@ untouched; no state moves.
 |------|---------|-------------|
 | `service_port` | (required) | External TCP port |
 | `server_port` | `null` | VM port that LB traffic is redirected to; unset = no translation |
-| `mode` | `target_pool` | `target_pool` or `backend_service` (see above) |
 | `scheme` | `tcp` | Scheme for `public_urls` (for example `sftp`) |
 | `allowed_cidr_blocks` | `["0.0.0.0/0"]` | Client CIDRs to the service port |
 | `name_overrides` | `{ ip_address = "" }` | Override generated resource names; `ip_address` renames the static IP |
-| `health_check_interval_sec` | `5` | `backend_service` mode: seconds between probes |
+| `health_check_interval_sec` | `5` | Seconds between probes |
 | `health_check_timeout_sec` | `4` | Probe timeout; must not exceed the interval |
 | `health_check_healthy_threshold` | `2` | Passed probes before an instance is added |
 | `health_check_unhealthy_threshold` | `2` | Failed probes before an instance is removed |
@@ -42,17 +39,11 @@ Optional connection: `subdomain` for a DNS A record.
 
 | Name | Description |
 |------|-------------|
-| `load_balancers` | One spec entry consumed by `gcp-gce-server` (shape below) |
+| `load_balancers` | One `type = "tcp"` spec entry consumed by `gcp-gce-server` |
 | `public_urls` | e.g. `sftp://<ip-or-host>:<service_port>` |
 | `cloud_init_stanzas` | Port-redirect script and unit for the VM; empty unless `server_port` is set |
 
-`load_balancers` entry by mode:
-
 ```hcl
-# mode = "target_pool"
-{ type = "target_pool", name = "<block_ref>-<suffix>", target_pool = "<self_link>" }
-
-# mode = "backend_service"
 {
   type         = "tcp"
   name         = "<block_ref>-<suffix>"   # server uses it for resource names
@@ -65,9 +56,9 @@ Optional connection: `subdomain` for a DNS A record.
 
 ## Firewall
 
-This capability opens `service_port` to `allowed_cidr_blocks`. In `backend_service` mode the
-server adds a rule for `server_port` from Google's health-check ranges (`35.191.0.0/16`,
-`130.211.0.0/22`) only. `server_port` is reachable from nothing else.
+This capability opens `service_port` to `allowed_cidr_blocks`. The server opens `server_port`
+to Google's health-check ranges (`35.191.0.0/16`, `130.211.0.0/22`) only. `server_port` is
+reachable from nothing else.
 
 ## Port translation on the VM (`server_port`)
 
@@ -99,8 +90,8 @@ What is affected:
   so the app sees the real client address.
 - SSH to the private IP via IAP, the VPC, or a tailnet: unaffected. The `gcp-gce-server` IAP
   firewall rules for port 22 keep working because IAP targets the private IP.
-- Health-check probes (`backend_service` mode): unaffected; they target the private IP on
-  `server_port`, which is why the spec reports `server_port` as the probed port.
+- Health-check probes: unaffected; they target the private IP on `server_port`, which is why
+  the spec reports `server_port` as the probed port.
 
 Delivery: the capability emits `cloud_init_stanzas` that write
 `/etc/nullstone/lb-port-redirect-<service_port>.sh` and
@@ -118,7 +109,7 @@ sudo iptables -t nat -L PREROUTING -n --line-numbers
 
 ## Example
 
-SFTP on port 22 with sshd keeping port 22 for IAP, health-checked backend service:
+SFTP on port 22 with sshd keeping port 22 for IAP:
 
 ```yaml
 capabilities:
@@ -132,7 +123,6 @@ capabilities:
   sftp-ingress:
     module: nullstone/gcp-gce-tcp-load-balancer
     vars:
-      mode: backend_service
       scheme: sftp
       service_port: 22   # what customers connect to
       server_port: 2022  # what the container publishes; sshd keeps 22
@@ -148,6 +138,20 @@ capabilities:
       service_port: 2022
       scheme: sftp
 ```
+
+## Upgrading from 0.0.x
+
+0.0.x created a target pool and forwarding rule here and the server set `target_pools` on the
+MIG. Target pools have no health check and silently lost their members when recreated.
+
+- Upgrade `gcp-gce-server` to >= 0.1.0 in the same change. Servers before 0.1.0 ignore the
+  spec; this version no longer outputs `target_pool`.
+- The apply destroys the target pool and forwarding rule and creates a backend service and a new
+  forwarding rule on the same address. Expect 30–60 s of refused connections on `service_port`.
+- If the apply fails with "IP address ... is already in use", the new forwarding rule was created
+  before the old one finished deleting. Apply again.
+- The static address, DNS record, client firewall, and port-redirect stanza are untouched. No
+  state moves.
 
 ## Tests
 

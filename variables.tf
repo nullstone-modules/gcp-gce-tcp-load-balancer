@@ -80,37 +80,21 @@ Changing a name after creation replaces the resource (a new IP address is alloca
 EOF
 }
 
-variable "mode" {
-  type        = string
-  default     = "target_pool"
-  description = <<EOF
-How the MIG attaches to the load balancer.
-- `target_pool` (default): this capability creates a target pool and forwarding rule; the MIG joins the pool. No health check.
-- `backend_service`: gcp-gce-server (>= 0.1.0) creates a TCP health check, backend service, and forwarding rule from this capability's spec.
-Switching mode on a live workspace recreates the forwarding rule: about 30-60 s of refused connections on service_port.
-EOF
-
-  validation {
-    condition     = contains(["target_pool", "backend_service"], var.mode)
-    error_message = "mode must be \"target_pool\" or \"backend_service\"."
-  }
-}
-
 locals {
-  # Port probed by the health check (backend_service mode) and redirected to on the VM.
+  # Port probed by the health check and redirected to on the VM.
   server_port = coalesce(var.server_port, var.service_port)
 }
 
 variable "health_check_interval_sec" {
   type        = number
   default     = 5
-  description = "backend_service mode: seconds between TCP probes to server_port."
+  description = "seconds between TCP probes to server_port."
 }
 
 variable "health_check_timeout_sec" {
   type        = number
   default     = 4
-  description = "backend_service mode: seconds to wait for a probe response. Must not exceed health_check_interval_sec."
+  description = "seconds to wait for a probe response. Must not exceed health_check_interval_sec."
 
   validation {
     condition     = var.health_check_timeout_sec <= var.health_check_interval_sec
@@ -121,11 +105,11 @@ variable "health_check_timeout_sec" {
 variable "health_check_healthy_threshold" {
   type        = number
   default     = 2
-  description = "backend_service mode: consecutive successful probes before an instance receives traffic."
+  description = "consecutive successful probes before an instance receives traffic."
 }
 
 variable "health_check_unhealthy_threshold" {
   type        = number
   default     = 2
-  description = "backend_service mode: consecutive failed probes before an instance stops receiving traffic."
+  description = "consecutive failed probes before an instance stops receiving traffic."
 }
