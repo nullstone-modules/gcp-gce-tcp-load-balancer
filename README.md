@@ -28,10 +28,7 @@ attach nothing.
 | `scheme` | `tcp` | Scheme for `public_urls` (for example `sftp`) |
 | `allowed_cidr_blocks` | `["0.0.0.0/0"]` | Client CIDRs to the service port |
 | `name_overrides` | `{ ip_address = "" }` | Override generated resource names; `ip_address` renames the static IP |
-| `health_check_interval_sec` | `5` | Seconds between probes |
-| `health_check_timeout_sec` | `4` | Probe timeout; must not exceed the interval |
-| `health_check_healthy_threshold` | `2` | Passed probes before an instance is added |
-| `health_check_unhealthy_threshold` | `2` | Failed probes before an instance is removed |
+| `health_check` | `{ interval_sec = 5, timeout_sec = 4, healthy_threshold = 2, unhealthy_threshold = 2 }` | TCP probe on `server_port`; set only the fields to change. `timeout_sec` must not exceed `interval_sec` |
 
 Optional connection: `subdomain` for a DNS A record.
 

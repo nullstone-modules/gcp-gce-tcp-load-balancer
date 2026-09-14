@@ -43,10 +43,7 @@ run "with_server_port" {
   command = plan
 
   variables {
-    health_check_interval_sec        = 10
-    health_check_timeout_sec         = 5
-    health_check_healthy_threshold   = 1
-    health_check_unhealthy_threshold = 3
+    health_check = { interval_sec = 10, timeout_sec = 5, healthy_threshold = 1, unhealthy_threshold = 3 }
   }
 
   assert {
@@ -104,9 +101,8 @@ run "timeout_must_not_exceed_interval" {
   command = plan
 
   variables {
-    health_check_interval_sec = 3
-    health_check_timeout_sec  = 4
+    health_check = { interval_sec = 3, timeout_sec = 4 }
   }
 
-  expect_failures = [var.health_check_timeout_sec]
+  expect_failures = [var.health_check]
 }

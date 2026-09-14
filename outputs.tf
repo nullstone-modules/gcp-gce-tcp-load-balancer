@@ -13,10 +13,10 @@ output "load_balancers" {
       service_port = var.service_port
       server_port  = local.server_port
       health_check = {
-        interval_sec        = var.health_check_interval_sec
-        timeout_sec         = var.health_check_timeout_sec
-        healthy_threshold   = var.health_check_healthy_threshold
-        unhealthy_threshold = var.health_check_unhealthy_threshold
+        interval_sec        = var.health_check.interval_sec
+        timeout_sec         = var.health_check.timeout_sec
+        healthy_threshold   = var.health_check.healthy_threshold
+        unhealthy_threshold = var.health_check.unhealthy_threshold
       }
     }
   ]

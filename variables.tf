@@ -85,31 +85,29 @@ locals {
   server_port = coalesce(var.server_port, var.service_port)
 }
 
-variable "health_check_interval_sec" {
-  type        = number
-  default     = 5
-  description = "seconds between TCP probes to server_port."
-}
-
-variable "health_check_timeout_sec" {
-  type        = number
-  default     = 4
-  description = "seconds to wait for a probe response. Must not exceed health_check_interval_sec."
+variable "health_check" {
+  type = object({
+    interval_sec        = optional(number, 5)
+    timeout_sec         = optional(number, 4)
+    healthy_threshold   = optional(number, 2)
+    unhealthy_threshold = optional(number, 2)
+  })
+  default = {
+    interval_sec        = 5
+    timeout_sec         = 4
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+  description = <<EOF
+TCP health check that gcp-gce-server runs against server_port. Omitted fields keep their defaults.
+- `interval_sec`: seconds between probes.
+- `timeout_sec`: seconds to wait for a probe response; must not exceed interval_sec.
+- `healthy_threshold`: consecutive successful probes before an instance receives traffic.
+- `unhealthy_threshold`: consecutive failed probes before an instance stops receiving traffic.
+EOF
 
   validation {
-    condition     = var.health_check_timeout_sec <= var.health_check_interval_sec
-    error_message = "health_check_timeout_sec must be less than or equal to health_check_interval_sec."
+    condition     = var.health_check.timeout_sec <= var.health_check.interval_sec
+    error_message = "health_check.timeout_sec must be less than or equal to health_check.interval_sec."
   }
-}
-
-variable "health_check_healthy_threshold" {
-  type        = number
-  default     = 2
-  description = "consecutive successful probes before an instance receives traffic."
-}
-
-variable "health_check_unhealthy_threshold" {
-  type        = number
-  default     = 2
-  description = "consecutive failed probes before an instance stops receiving traffic."
 }
