@@ -6,14 +6,14 @@
 # Variants (see README):
 #   default            regional external passthrough NLB, client IP preserved
 #   internal = true    regional internal passthrough NLB on a private-subnet address
-#   proxied  = true    global external proxy NLB on an anycast address; client IP only via PROXY protocol
+#   global   = true    global external proxy NLB on an anycast address; no passthrough, client IP only via PROXY protocol
 
 locals {
   address_name = coalesce(var.name_overrides.ip_address, local.resource_name)
 }
 
 resource "google_compute_address" "this" {
-  count = var.proxied ? 0 : 1
+  count = var.global ? 0 : 1
 
   name         = local.address_name
   region       = local.region
@@ -25,13 +25,13 @@ resource "google_compute_address" "this" {
   lifecycle {
     precondition {
       condition     = !var.internal || local.subnet != null
-      error_message = "internal = true needs app_metadata.subnet, provided by gcp-gce-server >= 0.1.0."
+      error_message = "internal = true needs app_metadata.lb_subnet, provided by gcp-gce-server >= 0.1.0."
     }
   }
 }
 
 resource "google_compute_global_address" "this" {
-  count = var.proxied ? 1 : 0
+  count = var.global ? 1 : 0
 
   name   = local.address_name
   labels = local.labels
@@ -52,10 +52,10 @@ locals {
   ip_address = coalesce(one(google_compute_address.this[*].address), one(google_compute_global_address.this[*].address))
 }
 
-# Client traffic to service_port. Not created when proxied: traffic then arrives from Google's
+# Client traffic to service_port. Not created when global: traffic then arrives from Google's
 # proxy ranges on server_port, which gcp-gce-server opens.
 resource "google_compute_firewall" "lb" {
-  count = var.proxied ? 0 : 1
+  count = var.global ? 0 : 1
 
   name        = "${local.resource_name}-allow-lb"
   network     = local.network

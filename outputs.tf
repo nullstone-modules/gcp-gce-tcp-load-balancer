@@ -10,12 +10,12 @@ output "load_balancers" {
       type           = "tcp"
       name           = local.resource_name
       scheme         = var.internal ? "INTERNAL" : "EXTERNAL"
-      proxied        = var.proxied
+      global         = var.global
       proxy_protocol = var.proxy_protocol
       ip_address     = local.ip_address
       service_port   = var.service_port
       server_port    = local.server_port
-      port_name      = "tcp-${local.server_port}" # MIG named port; used only when proxied
+      port_name      = "tcp-${local.server_port}" # MIG named port; used only when global
       health_check = {
         interval_sec        = var.health_check.interval_sec
         timeout_sec         = var.health_check.timeout_sec

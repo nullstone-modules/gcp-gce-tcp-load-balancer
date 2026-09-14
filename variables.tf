@@ -65,8 +65,8 @@ EOF
 
 locals {
   # server_port == service_port needs no rule; treat it as unset.
-  # Proxied traffic already arrives on server_port at the private IP, so no rule is needed.
-  redirect_enabled = var.server_port != null && var.server_port != var.service_port && !var.proxied
+  # Global (proxied) traffic already arrives on server_port at the private IP, so no rule is needed.
+  redirect_enabled = var.server_port != null && var.server_port != var.service_port && !var.global
 }
 
 variable "name_overrides" {
@@ -123,34 +123,34 @@ reported in private_urls. Set allowed_cidr_blocks to the client ranges. Requires
 EOF
 }
 
-variable "proxied" {
+variable "global" {
   type        = bool
   default     = false
   description = <<EOF
-Create a global external proxy load balancer on an anycast address instead of a regional
-passthrough one. Google terminates TCP and opens a new connection to server_port on the VM, so the
+Serve from a global anycast address (global external proxy load balancer) instead of a regional one.
+This is not passthrough: Google terminates TCP and opens a new connection to server_port on the VM, so the
 app sees a Google proxy address as the client unless proxy_protocol is set. allowed_cidr_blocks and
 server_port redirection do not apply. Cannot be combined with internal.
 EOF
 
   validation {
-    condition     = !(var.proxied && var.internal)
-    error_message = "proxied and internal cannot both be true; internal proxy load balancers are not supported."
+    condition     = !(var.global && var.internal)
+    error_message = "global and internal cannot both be true; internal proxy load balancers are not supported."
   }
 }
 
 variable "proxy_protocol" {
   type        = bool
   default     = false
-  description = "proxied only: send PROXY protocol v1 headers so the app can read the client IP. The app must expect them."
+  description = "global only: send PROXY protocol v1 headers so the app can read the client IP. The app must expect them."
 
   validation {
-    condition     = !var.proxy_protocol || var.proxied
-    error_message = "proxy_protocol requires proxied = true."
+    condition     = !var.proxy_protocol || var.global
+    error_message = "proxy_protocol requires global = true."
   }
 }
 
 locals {
-  # Private subnet for internal addresses; absent from app_metadata on gcp-gce-server < 0.1.0.
-  subnet = lookup(var.app_metadata, "subnet", null)
+  # Public (ingress) subnet for internal load balancer addresses; absent on gcp-gce-server < 0.1.0.
+  subnet = lookup(var.app_metadata, "lb_subnet", null)
 }

@@ -1,7 +1,7 @@
 # gcp-gce-tcp-load-balancer
 
 L4 TCP load balancer for `gcp-gce-server`. External passthrough by default; `internal` and
-`proxied` select the other variants.
+`global` select the other variants.
 
 ## Attach model
 
@@ -12,7 +12,7 @@ split instead:
 | Owner | Resources |
 |-------|-----------|
 | This capability | address, DNS A record, client firewall on `service_port`, port-redirect cloud-init, `load_balancers` spec, `public_urls` or `private_urls` |
-| `gcp-gce-server` >= 0.1.0 | health check on `server_port`, backend service on the MIG instance group, forwarding rule on the capability's address (plus the TCP proxy when proxied), firewall for Google's health-check ranges to `server_port` |
+| `gcp-gce-server` >= 0.1.0 | health check on `server_port`, backend service on the MIG instance group, forwarding rule on the capability's address (plus the TCP proxy when global), firewall for Google's health-check ranges to `server_port` |
 
 Backend membership is derived from the instance group, so it cannot drift, and the health check
 removes an instance that stops answering on `server_port`. Older servers ignore the spec and
@@ -23,15 +23,15 @@ attach nothing.
 | Flags | Load balancer | Address | Client IP | Reach |
 |-------|---------------|---------|-----------|-------|
 | (default) | regional external passthrough NLB | regional external | preserved | internet, `allowed_cidr_blocks` |
-| `internal = true` | regional internal passthrough NLB | private subnet | preserved | VPC, peering, VPN, tailnet; `allowed_cidr_blocks` |
-| `proxied = true` | global external proxy NLB | global anycast | Google proxy, or real IP via `proxy_protocol` | internet; `allowed_cidr_blocks` does not apply |
+| `internal = true` | regional internal passthrough NLB | public (ingress) subnet, internal IP | preserved | VPC, peering, VPN, tailnet; `allowed_cidr_blocks` |
+| `global = true` | global external proxy NLB (not passthrough) | global anycast | Google proxy, or real IP via `proxy_protocol` | internet; `allowed_cidr_blocks` does not apply |
 
-`proxied` and `internal` cannot be combined (internal proxy load balancers need a proxy-only
+`global` and `internal` cannot be combined (internal proxy load balancers need a proxy-only
 subnet, which gcp-network does not create). Changing a flag on a live workspace replaces the
 address and forwarding rule.
 
 `service_port` must match the Docker `host_port` unless `server_port` is set (see below).
-When proxied, the VM always receives traffic on `server_port` at its private IP; no redirect is
+When global, the VM always receives traffic on `server_port` at its private IP; no redirect is
 installed.
 
 ## Inputs
@@ -40,9 +40,9 @@ installed.
 |------|---------|-------------|
 | `service_port` | (required) | Port clients connect to |
 | `server_port` | `null` | VM port that LB traffic is redirected to; unset = no translation |
-| `internal` | `false` | Internal passthrough on a private-subnet address |
-| `proxied` | `false` | Global proxy NLB on an anycast address |
-| `proxy_protocol` | `false` | Proxied only: PROXY protocol v1 headers so the app sees the client IP |
+| `internal` | `false` | Internal passthrough on an internal address in the public (ingress) subnet |
+| `global` | `false` | Global anycast address; disables passthrough (Google proxies to the VM) |
+| `proxy_protocol` | `false` | Global only: PROXY protocol v1 headers so the app sees the client IP |
 | `scheme` | `tcp` | Scheme for the reported URL (for example `sftp`) |
 | `allowed_cidr_blocks` | `["0.0.0.0/0"]` | Client CIDRs to the service port (passthrough variants) |
 | `name_overrides` | `{ ip_address = "" }` | Override generated resource names; `ip_address` renames the address |
@@ -57,28 +57,28 @@ Optional connection: `subdomain` for a DNS A record.
 | `load_balancers` | One `type = "tcp"` spec entry consumed by `gcp-gce-server` |
 | `public_urls` | `<scheme>://<ip-or-host>:<service_port>`; empty when internal |
 | `private_urls` | Same URL when internal; empty otherwise |
-| `cloud_init_stanzas` | Port-redirect script and unit; empty unless `server_port` is set and not proxied |
+| `cloud_init_stanzas` | Port-redirect script and unit; empty unless `server_port` is set and not global |
 
 ```hcl
 {
   type           = "tcp"
   name           = "<block_ref>-<suffix>"   # server uses it for resource names
   scheme         = "EXTERNAL"               # INTERNAL when internal = true
-  proxied        = false
+  global         = false                    # not passthrough when true
   proxy_protocol = false
   ip_address     = "203.0.113.10"
   service_port   = 22                       # port on the forwarding rule
   server_port    = 2022                     # port probed on the VM; = service_port when unset
-  port_name      = "tcp-2022"               # MIG named port, used only when proxied
+  port_name      = "tcp-2022"               # MIG named port, used only when global
   health_check   = { interval_sec = 5, timeout_sec = 4, healthy_threshold = 2, unhealthy_threshold = 2 }
 }
 ```
 
 ## Firewall
 
-Passthrough variants: this capability opens `service_port` to `allowed_cidr_blocks`. Proxied:
+Passthrough variants: this capability opens `service_port` to `allowed_cidr_blocks`. Global:
 no client rule; traffic reaches the VM from Google's proxy ranges. In every variant the server
-opens `server_port` to `35.191.0.0/16` and `130.211.0.0/22` (health checks, and proxied client
+opens `server_port` to `35.191.0.0/16` and `130.211.0.0/22` (health checks, and global client
 traffic). `server_port` is reachable from nothing else.
 
 ## Port translation on the VM (`server_port`)
@@ -113,7 +113,7 @@ What is affected:
   firewall rules for port 22 keep working because IAP targets the private IP.
 - Health-check probes: unaffected; they target the private IP on `server_port`, which is why
   the spec reports `server_port` as the probed port.
-- Proxied: not installed. Google's proxies connect to the private IP on `server_port` directly.
+- Global: not installed. Google's proxies connect to the private IP on `server_port` directly.
 
 Delivery: the capability emits `cloud_init_stanzas` that write
 `/etc/nullstone/lb-port-redirect-<service_port>.sh` and
@@ -170,7 +170,7 @@ Global anycast address with client IPs delivered by PROXY protocol (the app must
     module: nullstone/gcp-gce-tcp-load-balancer
     vars:
       scheme: sftp
-      proxied: true
+      global: true
       proxy_protocol: true
       service_port: 22
       server_port: 2022

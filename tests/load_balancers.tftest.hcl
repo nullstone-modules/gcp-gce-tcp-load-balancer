@@ -37,7 +37,7 @@ variables {
     network       = "primary-vpc"
     region        = "us-central1"
     instance_tags = "ns-stack-primary,ns-block-sftp-server,ns-env-dev"
-    subnet        = "primary-private-a"
+    lb_subnet     = "primary-public-a"
   }
   scheme       = "sftp"
   service_port = 22
@@ -56,7 +56,7 @@ run "external_passthrough" {
       type           = "tcp"
       name           = "sftp-server-abcde"
       scheme         = "EXTERNAL"
-      proxied        = false
+      global         = false
       proxy_protocol = false
       ip_address     = "203.0.113.10"
       service_port   = 22
@@ -120,13 +120,13 @@ run "internal_passthrough" {
   }
 
   assert {
-    condition     = output.load_balancers[0].scheme == "INTERNAL" && output.load_balancers[0].proxied == false
+    condition     = output.load_balancers[0].scheme == "INTERNAL" && output.load_balancers[0].global == false
     error_message = "internal must set scheme INTERNAL"
   }
 
   assert {
-    condition     = resource.google_compute_address.this[0].address_type == "INTERNAL" && resource.google_compute_address.this[0].subnetwork == "primary-private-a"
-    error_message = "internal must reserve an address in the private subnet"
+    condition     = resource.google_compute_address.this[0].address_type == "INTERNAL" && resource.google_compute_address.this[0].subnetwork == "primary-public-a"
+    error_message = "internal must reserve an address in the public (ingress) subnet"
   }
 
   assert {
@@ -160,52 +160,52 @@ run "internal_requires_subnet" {
   expect_failures = [resource.google_compute_address.this]
 }
 
-run "proxied" {
+run "global" {
   command = plan
 
   variables {
-    proxied        = true
+    global         = true
     proxy_protocol = true
   }
 
   assert {
-    condition     = output.load_balancers[0].proxied == true && output.load_balancers[0].proxy_protocol == true && output.load_balancers[0].scheme == "EXTERNAL" && output.load_balancers[0].ip_address == "203.0.113.30"
-    error_message = "proxied must flag the entry and use the global address"
+    condition     = output.load_balancers[0].global == true && output.load_balancers[0].proxy_protocol == true && output.load_balancers[0].scheme == "EXTERNAL" && output.load_balancers[0].ip_address == "203.0.113.30"
+    error_message = "global must flag the entry and use the global address"
   }
 
   assert {
     condition     = length(resource.google_compute_global_address.this) == 1 && length(resource.google_compute_address.this) == 0
-    error_message = "proxied must reserve a global address instead of a regional one"
+    error_message = "global must reserve a global address instead of a regional one"
   }
 
   assert {
     condition     = length(resource.google_compute_firewall.lb) == 0
-    error_message = "proxied must not open service_port to clients; traffic arrives from Google proxies on server_port"
+    error_message = "global must not open service_port to clients; traffic arrives from Google proxies on server_port"
   }
 
   assert {
     condition     = length(output.cloud_init_stanzas) == 0
-    error_message = "proxied traffic already arrives on server_port; no redirect"
+    error_message = "global traffic already arrives on server_port; no redirect"
   }
 
   assert {
     condition     = [for u in output.public_urls : u.url] == ["sftp://203.0.113.30:22"]
-    error_message = "proxied load balancer must report the global address"
+    error_message = "global load balancer must report the global address"
   }
 }
 
-run "proxied_and_internal_conflict" {
+run "global_and_internal_conflict" {
   command = plan
 
   variables {
-    proxied  = true
+    global   = true
     internal = true
   }
 
-  expect_failures = [var.proxied]
+  expect_failures = [var.global]
 }
 
-run "proxy_protocol_requires_proxied" {
+run "proxy_protocol_requires_global" {
   command = plan
 
   variables {
