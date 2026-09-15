@@ -36,3 +36,17 @@ else
   iptables -t nat -I PREROUTING 1 $RULE
   echo "lb-port-redirect-$SERVICE_PORT: redirecting lb traffic $SERVICE_PORT -> $SERVER_PORT (private ip $PRIVATE_IP untouched)"
 fi
+
+# REDIRECT ends nat PREROUTING processing, so the packet never reaches Docker's DOCKER chain and
+# is delivered to the host's docker-proxy listener on SERVER_PORT through the filter INPUT chain.
+# Container-Optimized OS ships INPUT with policy DROP and only port 22 accepted, which silently
+# drops every redirected packet. Accept SERVER_PORT here; the GCE firewall still decides who can
+# reach it from outside the VM.
+INPUT_RULE="-p tcp --dport $SERVER_PORT -j ACCEPT"
+# shellcheck disable=SC2086
+if iptables -C INPUT $INPUT_RULE 2>/dev/null; then
+  echo "lb-port-redirect-$SERVICE_PORT: input rule already present"
+else
+  iptables -I INPUT 1 $INPUT_RULE
+  echo "lb-port-redirect-$SERVICE_PORT: accepting redirected traffic on $SERVER_PORT in INPUT"
+fi
