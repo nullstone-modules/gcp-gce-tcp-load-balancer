@@ -96,14 +96,21 @@ port 2022, and the capability installs this rule on every boot:
 PRIVATE_IP=$(curl -sf -H 'Metadata-Flavor: Google' \
   http://169.254.169.254/computeMetadata/v1/instance/network-interfaces/0/ip)
 iptables -t nat -I PREROUTING 1 -p tcp --dport 22 ! -d "$PRIVATE_IP" -j REDIRECT --to-ports 2022
+iptables -I INPUT 1 -p tcp --dport 2022 -j ACCEPT
 ```
 
 Why "not my private IP": packets from a passthrough load balancer (external or internal) reach
 the VM with the forwarding rule's IP as the destination (the guest agent installs a local route
-so the kernel accepts them). Packets from IAP, the VPC, a tailnet, or the health checker arrive
-with the VM's own private IP as the destination. Matching on the private IP instead of the LB
-address needs no Terraform-time value, survives address recreation without an instance-template
-change, and lets several LB capabilities share one server.
+so the kernel accepts them). Packets from IAP, the VPC, or a tailnet arrive with the VM's own
+private IP as the destination. Matching on the private IP instead of the LB address needs no
+Terraform-time value, survives address recreation without an instance-template change, and lets
+several LB capabilities share one server.
+
+Why the INPUT rule: `REDIRECT` ends nat PREROUTING, so the packet skips Docker's `DOCKER` chain
+and is delivered to the host's `docker-proxy` listener on `server_port` through the filter
+`INPUT` chain. Container-Optimized OS ships `INPUT` with policy `DROP` and only port 22 accepted,
+so without this rule every redirected packet is dropped and clients hang. The GCE firewall still
+limits who can reach `server_port` from outside the VM.
 
 What is affected:
 
@@ -111,8 +118,9 @@ What is affected:
   so the app sees the real client address.
 - SSH to the private IP via IAP, the VPC, or a tailnet: unaffected. The `gcp-gce-server` IAP
   firewall rules for port 22 keep working because IAP targets the private IP.
-- Health-check probes: unaffected; they target the private IP on `server_port`, which is why
-  the spec reports `server_port` as the probed port.
+- Health-check probes: unaffected. Passthrough probes are addressed to the load balancer IP on
+  `server_port` (not `service_port`), so they miss the redirect and reach the container through
+  Docker's published port; that is why the spec reports `server_port` as the probed port.
 - Global: not installed. Google's proxies connect to the private IP on `server_port` directly.
 
 Delivery: the capability emits `cloud_init_stanzas` that write
@@ -127,6 +135,7 @@ Verify on the VM:
 ```bash
 systemctl status lb-port-redirect-22
 sudo iptables -t nat -L PREROUTING -n --line-numbers
+sudo iptables -L INPUT -n --line-numbers | grep 2022
 ```
 
 ## Examples
